@@ -77,14 +77,14 @@ const MIN_DIST = 1.05; // perto o bastante para ler as lombadas
 function frameShelf() {
   if (!world) return;
   const tan = Math.tan(THREE.MathUtils.degToRad(18));
-  fitDist = Math.max((world.height + 0.8) / (2 * tan), (world.width + 5.4) / (2 * tan * camera.aspect));
+  fitDist = Math.max((world.height + 0.8) / (2 * tan), (world.width + 7) / (2 * tan * camera.aspect));
   view.tdist = fitDist;
   view.tx = 0; view.ty = 0;
 }
 /** Não deixa a vista fugir da estante. */
 function clampView() {
   if (!world) return;
-  view.tx = THREE.MathUtils.clamp(view.tx, -world.width / 2 - 2.2, world.width / 2 + 2.2);
+  view.tx = THREE.MathUtils.clamp(view.tx, -world.width / 2 - 3, world.width / 2 + 3);
   view.ty = THREE.MathUtils.clamp(view.ty, -world.height / 2, world.height / 2);
 }
 
@@ -671,7 +671,8 @@ function enterTV() {
   tvMode = true;
   tvSaved = { tx: view.tx, ty: view.ty, tdist: view.tdist };
   const p = world.tv.obj.localToWorld(world.tv.screenCenter.clone());
-  view.tx = p.x; view.ty = p.y - 0.14; view.tdist = p.z + 2.15;
+  const sc = world.tv.obj.scale.x;
+  view.tx = p.x; view.ty = p.y - 0.14 * sc; view.tdist = p.z + 2.15 * sc;
   tvbar.hidden = false;
   closeDrawer();
   setVolume(audio.volume);
