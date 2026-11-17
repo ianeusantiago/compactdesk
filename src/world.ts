@@ -4,6 +4,9 @@ import { buildCase, W, H, D } from "./case";
 import { FINISHES, SCENES, type Album, type Settings } from "./data";
 import { DECOR_BUILD, buildFrames } from "./props";
 import { buildTV, type TV } from "./tv";
+import { floorTex, grainTex, retroMat, wallTex, woodTex } from "./retro";
+
+const tiled = (t: THREE.Texture, x: number, y: number) => { const c = t.clone(); c.repeat.set(x, y); c.needsUpdate = true; return c; };
 
 export type CD = {
   album: Album; root: THREE.Group; lid: THREE.Group; disc: THREE.Object3D;
@@ -46,8 +49,10 @@ export function buildWorld(s: Settings, albums: Album[]): World {
   const scene = SCENES[s.scene] ?? SCENES.estudio;
   const finish = FINISHES[s.finish] ?? FINISHES.carvalho;
   const woodColor = s.customColor || finish.color;
-  const wood = new THREE.MeshStandardMaterial({ map: woodTexture(woodColor, finish.grain && !s.customColor), roughness: 0.62 });
-  const woodEdge = new THREE.MeshStandardMaterial({ color: new THREE.Color(woodColor).multiplyScalar(0.82), roughness: 0.6 });
+  // madeira pixelada (acabamentos lisos usam só o granulado)
+  const grained = finish.grain && !s.customColor;
+  const wood = new THREE.MeshStandardMaterial({ map: grained ? tiled(woodTex(woodColor), 2, 1) : grainTex("plastic"), color: grained ? "#ffffff" : woodColor, roughness: 0.62 });
+  const woodEdge = new THREE.MeshStandardMaterial({ map: grained ? woodTex(woodColor) : grainTex("plastic"), color: grained ? "#d6d1cb" : new THREE.Color(woodColor).multiplyScalar(0.82), roughness: 0.6 });
 
   // ---------- Estante (painéis com cantos arredondados) ----------
   const spine = s.display === "lombada";
@@ -75,19 +80,19 @@ export function buildWorld(s: Settings, albums: Album[]): World {
   group.add(shelf);
 
   // ---------- Sala ----------
-  const wall = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), std(scene.wall, 0.95));
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), new THREE.MeshStandardMaterial({ map: tiled(wallTex(scene.wall, scene.dark), 120, 60), roughness: 0.95 }));
   wall.position.set(0, floorY + 15, wallZ);
   wall.receiveShadow = true;
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), std(scene.floor, 0.85));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), new THREE.MeshStandardMaterial({ map: tiled(floorTex(scene.floor, scene.dark), 40, 20), roughness: 0.8 }));
   floor.rotation.x = -Math.PI / 2; floor.position.set(0, floorY, wallZ + 15);
   floor.receiveShadow = true;
-  const skirting = new THREE.Mesh(new THREE.BoxGeometry(60, 0.09, 0.02), std(new THREE.Color(scene.wall).multiplyScalar(0.93).getStyle(), 0.6));
+  const skirting = new THREE.Mesh(new THREE.BoxGeometry(60, 0.09, 0.02), retroMat(new THREE.Color(scene.wall).multiplyScalar(0.88).getStyle(), 0.6));
   skirting.position.set(0, floorY + 0.045, wallZ + 0.01); skirting.receiveShadow = true;
   group.add(wall, floor, skirting);
   // paredes laterais: fecham o quarto
   const roomHalf = width / 2 + 6.5; // longe o bastante para não aparecer no enquadramento normal
   for (const side of [-1, 1]) {
-    const w = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), std(new THREE.Color(scene.wall).multiplyScalar(0.96).getStyle(), 0.95));
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshStandardMaterial({ map: tiled(wallTex(scene.wall, scene.dark), 60, 60), color: "#f2f2f2", roughness: 0.95 }));
     w.rotation.y = -side * Math.PI / 2;
     w.position.set(side * roomHalf, floorY + 15, wallZ + 15);
     w.receiveShadow = true;

@@ -1,9 +1,10 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { Album } from "./data";
+import { grainTex, woodTex } from "./retro";
 
 const std = (color: string, rough = 0.6, extra: THREE.MeshStandardMaterialParameters = {}) =>
-  new THREE.MeshStandardMaterial({ color, roughness: rough, ...extra });
+  new THREE.MeshStandardMaterial({ color, roughness: rough, map: grainTex(), ...extra }); // granulado retrô em tudo
 const rbox = (w: number, h: number, d: number, r: number, mat: THREE.Material) => {
   const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, r), mat);
   m.castShadow = m.receiveShadow = true;
@@ -48,7 +49,7 @@ export function buildTV(albums: Album[]): TV {
   const on = real.length > 0;
 
   // ---------- rack baixo ----------
-  const wood = std("#5a3f2c", 0.6);
+  const wood = std("#ffffff", 0.6, { map: woodTex("#5a3f2c") });
   const top = rbox(1.6, 0.05, 0.7, 0.012, wood); top.position.y = 0.5;
   const low = rbox(1.5, 0.035, 0.64, 0.01, wood); low.position.y = 0.16;
   obj.add(top, low);

@@ -1,9 +1,10 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { Album } from "./data";
+import { grainTex, woodTex } from "./retro";
 
 const std = (color: string, rough = 0.7, extra: THREE.MeshStandardMaterialParameters = {}) =>
-  new THREE.MeshStandardMaterial({ color, roughness: rough, ...extra });
+  new THREE.MeshStandardMaterial({ color, roughness: rough, map: grainTex(), ...extra }); // granulado retrô em tudo
 const rbox = (w: number, h: number, d: number, r: number, mat: THREE.Material) => {
   const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, r), mat);
   m.castShadow = m.receiveShadow = true;
@@ -79,11 +80,11 @@ function leafGeometry(len: number, wid: number) {
 export const DECOR_BUILD: Record<string, () => THREE.Object3D> = {
   planta() {
     const g = new THREE.Group();
-    const pot = lathe([[0, 0], [0.1, 0], [0.12, 0.03], [0.14, 0.2], [0.155, 0.21], [0.155, 0.24], [0.14, 0.24], [0.13, 0.22]], std("#e8e2d6", 0.55));
-    const soil = new THREE.Mesh(new THREE.CircleGeometry(0.13, 20), std("#3b2a1e", 1));
+    const pot = lathe([[0, 0], [0.1, 0], [0.12, 0.03], [0.14, 0.2], [0.155, 0.21], [0.155, 0.24], [0.14, 0.24], [0.13, 0.22]], std("#e8e2d6", 0.55, { map: grainTex("clay") }));
+    const soil = new THREE.Mesh(new THREE.CircleGeometry(0.13, 20), std("#3b2a1e", 1, { map: grainTex("soil") }));
     soil.rotation.x = -Math.PI / 2; soil.position.y = 0.215;
     g.add(pot, soil);
-    const leafMat = [std("#3f7f45", 0.6, { side: THREE.DoubleSide }), std("#5a9b56", 0.6, { side: THREE.DoubleSide })];
+    const leafMat = [std("#3f7f45", 0.6, { side: THREE.DoubleSide, map: grainTex("leaf") }), std("#5a9b56", 0.6, { side: THREE.DoubleSide, map: grainTex("leaf") })];
     for (let i = 0; i < 14; i++) {
       const len = 0.28 + (i % 4) * 0.07;
       const leaf = new THREE.Mesh(leafGeometry(len, 0.07 + (i % 3) * 0.015), leafMat[i % 2]);
@@ -98,9 +99,9 @@ export const DECOR_BUILD: Record<string, () => THREE.Object3D> = {
   },
   cacto() {
     const g = new THREE.Group();
-    const pot = lathe([[0, 0], [0.13, 0], [0.16, 0.26], [0.17, 0.26], [0.17, 0.29], [0, 0.29]], std("#c97a52", 0.85));
+    const pot = lathe([[0, 0], [0.13, 0], [0.16, 0.26], [0.17, 0.26], [0.17, 0.29], [0, 0.29]], std("#c97a52", 0.85, { map: grainTex("clay") }));
     g.add(pot);
-    const green = std("#4f8f55", 0.7);
+    const green = std("#4f8f55", 0.7, { map: grainTex("leaf") });
     const seg = (r: number, h: number, x: number, y: number, rz = 0) => {
       const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, h, 4, 12), green);
       m.position.set(x, y, 0); m.rotation.z = rz; m.castShadow = true; g.add(m);
@@ -147,7 +148,7 @@ export const DECOR_BUILD: Record<string, () => THREE.Object3D> = {
   },
   caixa_som() {
     const g = new THREE.Group();
-    const cab = rbox(0.4, 0.66, 0.36, 0.02, std("#5c3d27", 0.55)); cab.position.y = 0.33 + 0.04;
+    const cab = rbox(0.4, 0.66, 0.36, 0.02, std("#ffffff", 0.55, { map: woodTex("#5c3d27") })); cab.position.y = 0.33 + 0.04;
     const baffle = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.62), std("#1b1b1d", 0.8));
     baffle.position.set(0, 0.37, 0.181);
     g.add(cab, baffle);
@@ -180,7 +181,7 @@ export const DECOR_BUILD: Record<string, () => THREE.Object3D> = {
   },
   gato() {
     const g = new THREE.Group();
-    const fur = std("#f0a35a", 0.85);
+    const fur = std("#f0a35a", 0.85, { map: grainTex("fabric") });
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.16, 4, 12), fur);
     body.rotation.z = Math.PI / 2; body.position.y = 0.08;
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 12), fur); head.position.set(0.15, 0.17, 0);
