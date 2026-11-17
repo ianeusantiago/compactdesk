@@ -27,6 +27,9 @@ const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).p
 /** Estado vindo do player de prévias (quando a TV está em foco tocando). */
 export type External = { album: Album; ti: number; el: number; dur: number; playing: boolean; status: string };
 
+/** escolha da TV durante esta execução do app (zera ao fechar) */
+let picked: { id: number; ti: number } | null = null;
+
 export type TV = {
   obj: THREE.Group;
   /** ponto central da tela (coordenadas locais do obj) */
@@ -150,16 +153,23 @@ export function buildTV(albums: Album[]): TV {
   // ---------- programação ----------
   const covers = new Map<number, HTMLImageElement>();
   for (const a of real) if (a.urls?.front) { const im = new Image(); im.src = a.urls.front; covers.set(a.id, im); }
-  // cada vez que o app abre, começa num álbum aleatório (diferente do último, se houver mais de um)
+  // a cada abertura do app: álbum e faixa sorteados (diferente do último álbum, se houver mais de um).
+  // Enquanto o app está aberto, a escolha fica na memória para a TV não trocar quando a sala é reconstruída.
   let ai = 0, ti = 0, start = performance.now() / 1000;
   if (real.length) {
-    let last = -1;
-    try { last = Number(sessionStorage.getItem("cd.tvAlbum") ?? localStorage.getItem("cd.tvLast") ?? -1); } catch { /* ok */ }
-    const saved = sessionStorage.getItem("cd.tvAlbum");
-    const pool = real.map((_, i) => i).filter((i) => real.length < 2 || real[i].id !== last || saved !== null);
-    ai = saved !== null ? Math.max(0, real.findIndex((a) => a.id === last)) : pool[Math.floor(Math.random() * pool.length)];
-    try { sessionStorage.setItem("cd.tvAlbum", String(real[ai].id)); localStorage.setItem("cd.tvLast", String(real[ai].id)); } catch { /* ok */ }
+    const keep = picked ? real.findIndex((a) => a.id === picked!.id) : -1;
+    if (keep >= 0) { ai = keep; ti = Math.min(picked!.ti, real[ai].tracks.length - 1); }
+    else {
+      let last = -1;
+      try { last = Number(localStorage.getItem("cd.tvLast") ?? -1); } catch { /* ok */ }
+      const pool = real.map((_, i) => i).filter((i) => real.length < 2 || real[i].id !== last);
+      ai = pool[Math.floor(Math.random() * pool.length)];
+      ti = Math.floor(Math.random() * real[ai].tracks.length);
+      try { localStorage.setItem("cd.tvLast", String(real[ai].id)); } catch { /* ok */ }
+    }
+    picked = { id: real[ai].id, ti };
   }
+  const remember = () => { if (real.length) picked = { id: real[ai].id, ti }; };
   let ext: External | null = null;
   let lastDraw = -1;
   let volume = 0.8, volShownAt = -10;
@@ -258,11 +268,12 @@ export function buildTV(albums: Album[]): TV {
       if (ti >= real[ai].tracks.length) { ti = 0; ai = (ai + 1) % real.length; }
       if (ti < 0) { ai = (ai - 1 + real.length) % real.length; ti = real[ai].tracks.length - 1; }
       start = performance.now() / 1000;
+      remember();
     },
     stepAlbum(dir) {
       if (!on) return;
       ai = (ai + dir + real.length) % real.length; ti = 0;
-      try { sessionStorage.setItem("cd.tvAlbum", String(real[ai].id)); } catch { /* ok */ }
+      remember();
       start = performance.now() / 1000;
     },
     knob,

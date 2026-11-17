@@ -1,10 +1,10 @@
-import * as THREE from "three";
+﻿import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { Album } from "./data";
-import { grainTex, woodTex } from "./retro";
+import { grainTex, pixTex, woodTex } from "./retro";
 
 const std = (color: string, rough = 0.7, extra: THREE.MeshStandardMaterialParameters = {}) =>
-  new THREE.MeshStandardMaterial({ color, roughness: rough, map: grainTex(), ...extra }); // granulado retrô em tudo
+  new THREE.MeshStandardMaterial({ color, roughness: rough, map: grainTex(), ...extra }); // granulado retrÃ´ em tudo
 const rbox = (w: number, h: number, d: number, r: number, mat: THREE.Material) => {
   const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, r), mat);
   m.castShadow = m.receiveShadow = true;
@@ -59,7 +59,7 @@ export function buildFrames(albums: Album[]): THREE.Group {
 }
 
 // =====================================================================
-// Decorações (modelos refeitos)
+// DecoraÃ§Ãµes (modelos refeitos)
 // =====================================================================
 function leafGeometry(len: number, wid: number) {
   const s = new THREE.Shape();
@@ -67,7 +67,7 @@ function leafGeometry(len: number, wid: number) {
   s.bezierCurveTo(wid, len * 0.25, wid * 0.8, len * 0.75, 0, len);
   s.bezierCurveTo(-wid * 0.8, len * 0.75, -wid, len * 0.25, 0, 0);
   const geo = new THREE.ShapeGeometry(s, 8);
-  // curva a folha para trás
+  // curva a folha para trÃ¡s
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i), x = pos.getX(i);
@@ -148,23 +148,91 @@ export const DECOR_BUILD: Record<string, () => THREE.Object3D> = {
   },
   caixa_som() {
     const g = new THREE.Group();
-    const cab = rbox(0.4, 0.66, 0.36, 0.02, std("#ffffff", 0.55, { map: woodTex("#5c3d27") })); cab.position.y = 0.33 + 0.04;
-    const baffle = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.62), std("#1b1b1d", 0.8));
-    baffle.position.set(0, 0.37, 0.181);
-    g.add(cab, baffle);
-    const driver = (r: number, y: number) => {
+    const W = 0.44, H = 0.66, Dp = 0.38, LIP = 0.03, INSET = 0.04, F = Dp / 2; // frente rebaixada INSET para dentro
+    const darkWood = std("#ffffff", 0.55, { map: woodTex("#3d2818") });
+    const CAV = 0.11; // espaço interno atrás do painel (onde o cone afunda)
+    const backZ = -F, frontBody = F - INSET - CAV;
+    const body = rbox(W, H, frontBody - backZ, 0.02, darkWood);
+    body.position.set(0, 0.04 + H / 2, (frontBody + backZ) / 2);
+    g.add(body);
+    // moldura (bordas que avançam até a frente, dando profundidade à frente)
+    const lip = (w: number, h: number, x: number, y: number) => {
+      const m = rbox(w, h, INSET + CAV + 0.02, 0.006, darkWood);
+      m.position.set(x, 0.04 + y, F - (INSET + CAV + 0.02) / 2); g.add(m);
+    };
+    lip(W, LIP, 0, H - LIP / 2); lip(W, LIP, 0, LIP / 2);
+    lip(LIP, H, -W / 2 + LIP / 2, H / 2); lip(LIP, H, W / 2 - LIP / 2, H / 2);
+    // painel frontal em madeira clara, lá no fundo da moldura
+    const fz = F - INSET;
+    // painel com furos para o grave, o agudo e o duto
+    const bw = W - LIP * 2 + 0.002, bh = H - LIP * 2 + 0.002;
+    const panel = new THREE.Shape();
+    panel.moveTo(-bw / 2, -bh / 2); panel.lineTo(bw / 2, -bh / 2); panel.lineTo(bw / 2, bh / 2); panel.lineTo(-bw / 2, bh / 2); panel.closePath();
+    const hole = (x: number, y: number, r: number) => { const p = new THREE.Path(); p.absarc(x, y - H / 2, r, 0, Math.PI * 2, true); panel.holes.push(p); };
+    hole(0, 0.3, 0.15 * 0.9); hole(-0.09, 0.56, 0.045 * 0.9); hole(0.12, 0.1, 0.04);
+    const pg = new THREE.ShapeGeometry(panel, 32);
+    const uv = pg.attributes.uv, pp = pg.attributes.position;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (pp.getX(i) + bw / 2) / bw, (pp.getY(i) + bh / 2) / bh);
+    const baffle = new THREE.Mesh(pg, std("#ffffff", 0.6, { map: woodTex("#b08560") }));
+    baffle.position.set(0, 0.04 + H / 2, fz + 0.001);
+    baffle.receiveShadow = true;
+    g.add(baffle);
+    // fundo escuro atrás dos furos (interior da caixa)
+    const inside = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh), std("#080809", 1));
+    inside.position.set(0, 0.04 + H / 2, fz - 0.09);
+    g.add(inside);
+
+    // ---- alto-falante no estilo subwoofer: preto, mas com brilho para ler o volume ----
+    const ringBlack = std("#1c1d20", 0.42, { metalness: 0.2 });
+    const rubber = std("#18191b", 0.28);
+    const coneMat = std("#232427", 0.5, { side: THREE.DoubleSide, map: pixTex("cone-black", 4, 32, (x) => {
+      for (let y = 0; y < 32; y++) { x.fillStyle = y % 6 === 0 ? "#cfcfcf" : "#ffffff"; x.fillRect(0, y, 4, 1); }
+    }, 10) });
+    const capMat = std("#2a2b2f", 0.3, { metalness: 0.25 });
+    const screwMat = std("#8f949b", 0.3, { metalness: 0.8 });
+    const driver = (r: number, x: number, y: number, screws: number) => {
       const d = new THREE.Group();
-      d.position.set(0, y, 0.182);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(r, r * 0.12, 8, 32), std("#2a2a2c", 0.35, { metalness: 0.4 }));
-      const cone = lathe([[r * 0.95, 0], [r * 0.35, -r * 0.35], [0, -r * 0.35]], std("#141416", 0.9, { side: THREE.DoubleSide }), 32);
-      cone.rotation.x = -Math.PI / 2;
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(r * 0.3, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), std("#2c2c30", 0.4));
-      cap.rotation.x = Math.PI / 2; cap.position.z = -r * 0.3;
-      d.add(ring, cone, cap);
+      d.position.set(x, 0.04 + y, fz + 0.002);
+      // aro de fixação com borda chanfrada + parafusos
+      const mount = lathe([[r * 0.9, 0.004], [r * 1.08, 0.012], [r * 1.16, 0.006], [r * 1.18, 0]], ringBlack, 48);
+      mount.rotation.x = Math.PI / 2;
+      d.add(mount);
+      for (let i = 0; i < screws; i++) {
+        const a = (i / screws) * Math.PI * 2 + 0.2;
+        const sc = new THREE.Mesh(new THREE.SphereGeometry(r * 0.035, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), screwMat);
+        sc.rotation.x = Math.PI / 2; sc.position.set(Math.cos(a) * r * 1.07, Math.sin(a) * r * 1.07, 0.011);
+        d.add(sc);
+      }
+      // borda de borracha larga, abaulada para fora (o brilho dela é que desenha o círculo)
+      const surround = new THREE.Mesh(new THREE.TorusGeometry(r * 0.78, r * 0.12, 14, 56), rubber);
+      surround.scale.z = 0.75; surround.position.z = 0.002;
+      d.add(surround);
+      // cone fundo
+      const cone = lathe([[r * 0.68, 0], [r * 0.6, -r * 0.12], [r * 0.48, -r * 0.3], [r * 0.38, -r * 0.42]], coneMat, 48);
+      cone.rotation.x = Math.PI / 2;
+      d.add(cone);
+      // domo central grande e baixo
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(r * 0.4, 28, 10, 0, Math.PI * 2, 0, Math.PI / 2), capMat);
+      cap.rotation.x = Math.PI / 2; cap.scale.y = 0.38; cap.position.z = -r * 0.42;
+      d.add(cap);
+      d.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
       g.add(d);
     };
-    driver(0.13, 0.27); driver(0.045, 0.56);
-    for (const x of [-0.15, 0.15]) for (const z of [-0.13, 0.13]) {
+    driver(0.15, 0, 0.3, 8);      // grave
+    driver(0.045, -0.09, 0.56, 4); // agudo
+    // duto de grave (furo redondo), embaixo à direita
+    const port = new THREE.Group();
+    port.position.set(0.12, 0.04 + 0.1, fz);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.14, 24, 1, true), std("#0d0d0f", 0.8, { side: THREE.BackSide }));
+    tube.rotation.x = Math.PI / 2; tube.position.z = -0.07;
+    const flare = new THREE.Mesh(new THREE.TorusGeometry(0.043, 0.008, 8, 28), ringBlack);
+    flare.position.z = 0.004;
+    const bottom = new THREE.Mesh(new THREE.CircleGeometry(0.04, 20), std("#050506", 1));
+    bottom.position.z = -0.135;
+    port.add(tube, flare, bottom);
+    g.add(port);
+    // pés
+    for (const x of [-0.16, 0.16]) for (const z of [-0.14, 0.14]) {
       const f = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.04, 10), std("#111", 0.4));
       f.position.set(x, 0.02, z); g.add(f);
     }
