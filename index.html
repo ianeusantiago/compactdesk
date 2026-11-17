@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Compact Desk</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <canvas id="scene" data-cur="idle"></canvas>
+
+  <header id="top">
+    <div class="brand">
+      <span class="logo">Compact Desk</span>
+      <span id="points" class="count"></span>
+    </div>
+    <nav>
+      <button class="link" data-open="custom">Sala</button>
+      <button class="link" data-open="organize">Organizar</button>
+      <button class="link" data-open="shop">Loja</button>
+      <button class="ink" data-open="add">+ Adicionar CD</button>
+    </nav>
+  </header>
+
+  <aside id="drawer" class="paper" hidden></aside>
+  <aside id="info" class="paper" hidden></aside>
+
+  <div id="modal" hidden><div class="paper sheet" id="add"></div></div>
+  <div id="lightbox" hidden></div>
+
+  <div id="tvbar" class="paper" hidden>
+    <button class="link" data-tv="prev">‹ Anterior</button>
+    <button class="ink" data-tv="toggle">Pausar</button>
+    <button class="link" data-tv="next">Próxima ›</button>
+    <span id="tvinfo"></span>
+    <button class="link" data-tv="exit">Sair da TV</button>
+  </div>
+  <div id="label"></div>
+  <footer id="hint">arraste para mover · roda para zoom · clique num CD para pegar · espaço abre o estojo · esc devolve</footer>
+  <div id="toast"></div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
