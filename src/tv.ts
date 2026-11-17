@@ -34,6 +34,10 @@ export type TV = {
   on: boolean;
   current: () => { album: Album; ti: number } | null;
   step: (dir: number) => void;
+  stepAlbum: (dir: number) => void;
+  /** botão de volume na frente da TV */
+  knob: THREE.Object3D;
+  setVolume: (v: number) => void;
   setExternal: (e: External | null) => void;
   tick: (t: number) => void;
 };
@@ -104,10 +108,23 @@ export function buildTV(albums: Album[]): TV {
   });
   const spk = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.1), std("#ffffff", 0.7, { map: grille }));
   spk.position.set(-0.24, 0.13, 0.391); tv.add(spk);
-  for (let i = 0; i < 4; i++) {
-    const b = rbox(0.06, 0.035, 0.02, 0.008, i === 3 ? std("#9b2b22", 0.4) : std("#a9adb2", 0.4));
-    b.position.set(0.15 + i * 0.085, 0.13, 0.392); tv.add(b);
+  for (let i = 0; i < 2; i++) {
+    const b = rbox(0.06, 0.035, 0.02, 0.008, i === 1 ? std("#9b2b22", 0.4) : std("#a9adb2", 0.4));
+    b.position.set(0.12 + i * 0.085, 0.13, 0.392); tv.add(b);
   }
+  // knob de volume (gira conforme o volume)
+  const knob = new THREE.Group();
+  knob.position.set(0.37, 0.13, 0.39);
+  const kBody = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.035, 24), std("#2a2c30", 0.35));
+  kBody.rotation.x = Math.PI / 2; kBody.position.z = 0.018;
+  const kMark = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.03, 0.004), std("#e9e4d8", 0.4));
+  kMark.position.set(0, 0.022, 0.037);
+  const kRing = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.004, 6, 28), std("#a9adb2", 0.3, { metalness: 0.6 }));
+  kRing.position.z = 0.004;
+  knob.add(kBody, kMark, kRing);
+  knob.userData.knob = true;
+  kBody.userData.knob = true; kMark.userData.knob = true;
+  tv.add(knob);
   const led = new THREE.Mesh(new THREE.SphereGeometry(0.01, 8, 8), std(on ? "#5dff7a" : "#ff3b30", 0.3, { emissive: on ? "#5dff7a" : "#ff3b30", emissiveIntensity: 2.5 }));
   led.position.set(0.5, 0.13, 0.392); tv.add(led);
   // grade de ventilação no topo
@@ -135,6 +152,7 @@ export function buildTV(albums: Album[]): TV {
   let ai = real.length ? Math.floor(Math.random() * real.length) : 0, ti = 0, start = performance.now() / 1000;
   let ext: External | null = null;
   let lastDraw = -1;
+  let volume = 0.8, volShownAt = -10;
 
   const fit = (s: string, max: number) => { let o = s; while (g.measureText(o).width > max && o.length > 1) o = o.slice(0, -1); return o === s ? s : o.trimEnd() + "…"; };
 
@@ -197,6 +215,16 @@ export function buildTV(albums: Album[]): TV {
       g.fillStyle = i % 3 ? "rgba(90,130,255,.85)" : "rgba(160,190,255,.9)";
       g.fillRect(8 + i * 7.6, 232 - h, 5, h);
     }
+    // indicador de volume (some depois de 1,5 s)
+    if (now - volShownAt < 1.5) {
+      g.fillStyle = "rgba(4,6,14,.75)"; g.fillRect(40, 196, 240, 30);
+      g.fillStyle = "#7dff9a"; g.font = "600 12px 'Barlow Condensed', sans-serif";
+      g.fillText("VOLUME", 50, 216);
+      for (let i = 0; i < 20; i++) {
+        g.fillStyle = i < Math.round(volume * 20) ? "#7dff9a" : "rgba(125,255,154,.2)";
+        g.fillRect(104 + i * 8.4, 204, 6, 14);
+      }
+    }
     // varredura
     g.fillStyle = "rgba(0,0,0,.2)";
     for (let y = 0; y < 240; y += 2) g.fillRect(0, y, 320, 1);
@@ -213,16 +241,27 @@ export function buildTV(albums: Album[]): TV {
   return {
     obj, screen, on,
     screenCenter: new THREE.Vector3(0, 0.525 + SY, -0.02 + 0.43),
-    current: () => (on ? { album: ext?.album ?? real[ai], ti: ext?.ti ?? ti } : null),
+    current: () => (on ? { album: real[ai], ti } : null),
     step(dir) {
       if (!on) return;
-      const a = real[ai];
       ti += dir;
-      if (ti >= a.tracks.length) { ti = 0; ai = (ai + 1) % real.length; }
+      if (ti >= real[ai].tracks.length) { ti = 0; ai = (ai + 1) % real.length; }
       if (ti < 0) { ai = (ai - 1 + real.length) % real.length; ti = real[ai].tracks.length - 1; }
       start = performance.now() / 1000;
     },
-    setExternal(e) { ext = e; if (e) { ai = Math.max(0, real.indexOf(e.album)); ti = e.ti; } },
+    stepAlbum(dir) {
+      if (!on) return;
+      ai = (ai + dir + real.length) % real.length; ti = 0;
+      start = performance.now() / 1000;
+    },
+    knob,
+    setVolume(v) {
+      volume = v;
+      volShownAt = performance.now() / 1000;
+      knob.rotation.z = -(v - 0.5) * Math.PI * 1.5; // de -135° a +135°
+      lastDraw = -1;
+    },
+    setExternal(e) { ext = e; },
     tick(t) {
       if (!on || t - lastDraw < 1 / 24) return;
       lastDraw = t;

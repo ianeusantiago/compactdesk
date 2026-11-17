@@ -29,9 +29,12 @@
   <div id="lightbox" hidden></div>
 
   <div id="tvbar" class="paper" hidden>
-    <button class="link" data-tv="prev">‹ Anterior</button>
+    <button class="link" data-tv="prevAlbum" title="Álbum anterior">«</button>
+    <button class="link" data-tv="prev" title="Faixa anterior">‹ Faixa</button>
     <button class="ink" data-tv="toggle">Pausar</button>
-    <button class="link" data-tv="next">Próxima ›</button>
+    <button class="link" data-tv="next" title="Próxima faixa">Faixa ›</button>
+    <button class="link" data-tv="nextAlbum" title="Próximo álbum">»</button>
+    <label class="vol" title="Volume (ou gire o botão da TV)">VOL <input id="tvvol" type="range" min="0" max="100" value="80"></label>
     <span id="tvinfo"></span>
     <button class="link" data-tv="exit">Sair da TV</button>
   </div>

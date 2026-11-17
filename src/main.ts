@@ -634,7 +634,23 @@ async function dropDragged() {
 let tvMode = false;
 let tvSaved = { tx: 0, ty: 0, tdist: 7 };
 const audio = new Audio();
-audio.volume = 0.8;
+audio.volume = Number(localStorage.getItem("cd.vol") ?? 0.8);
+function setVolume(v: number) {
+  v = THREE.MathUtils.clamp(v, 0, 1);
+  audio.volume = v;
+  try { localStorage.setItem("cd.vol", String(v)); } catch { /* ok */ }
+  world?.tv.setVolume(v);
+  const r = document.getElementById("tvvol") as HTMLInputElement | null;
+  if (r) r.value = String(Math.round(v * 100));
+}
+document.getElementById("tvvol")?.addEventListener("input", (e) => setVolume(Number((e.target as HTMLInputElement).value) / 100));
+let knobDrag = false;
+function pickKnob() {
+  if (!world?.tv.on) return false;
+  ray.setFromCamera(mouse, camera);
+  const h = ray.intersectObject(world.tv.knob, true).find((x) => (x.object as THREE.Mesh).isMesh);
+  return !!h;
+}
 let tvStatus = "";
 const tvbar = $("tvbar");
 
@@ -648,9 +664,10 @@ function enterTV() {
   tvMode = true;
   tvSaved = { tx: view.tx, ty: view.ty, tdist: view.tdist };
   const p = world.tv.obj.localToWorld(world.tv.screenCenter.clone());
-  view.tx = p.x; view.ty = p.y - 0.15; view.tdist = p.z + 1.25;
+  view.tx = p.x; view.ty = p.y + 0.02; view.tdist = p.z + 2.15;
   tvbar.hidden = false;
   closeDrawer();
+  setVolume(audio.volume);
   playCurrent();
 }
 function exitTV() {
@@ -690,6 +707,7 @@ tvbar.addEventListener("click", (e) => {
   if (!a) return;
   if (a === "exit") exitTV();
   if (a === "prev" || a === "next") { world?.tv.step(a === "next" ? 1 : -1); playCurrent(); }
+  if (a === "prevAlbum" || a === "nextAlbum") { world?.tv.stepAlbum(a === "nextAlbum" ? 1 : -1); playCurrent(); }
   if (a === "toggle") { audio.paused ? audio.play().catch(() => {}) : audio.pause(); }
 });
 audio.addEventListener("play", () => { const b = tvbar.querySelector<HTMLElement>('[data-tv="toggle"]'); if (b) b.textContent = "Pausar"; });
@@ -702,6 +720,7 @@ canvas.addEventListener("pointermove", (e) => {
   mouse.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   const dx = e.clientX - last.x, dy = e.clientY - last.y;
   last = { x: e.clientX, y: e.clientY };
+  if (knobDrag) { setVolume(audio.volume - dy * 0.006 + dx * 0.006); return; } // girar o volume
   if (!drag) return;
   if (!moved && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 5) moved = true;
   if (!moved) return;
@@ -715,6 +734,7 @@ canvas.addEventListener("pointerdown", (e) => {
   last = downAt = { x: e.clientX, y: e.clientY };
   moved = false;
   canvas.setPointerCapture(e.pointerId);
+  if (tvMode && pickKnob()) { knobDrag = true; drag = ""; return; }
   if (organizing) {
     const cd = pick();
     if (cd) { dragCD = cd; dragPlane.set(new THREE.Vector3(0, 0, 1), -cd.home.z); drag = "item"; return; }
@@ -728,6 +748,7 @@ canvas.addEventListener("pointerdown", (e) => {
   drag = focused ? (downOnFocused ? "spin" : "") : tvMode ? "" : "pan";
 });
 canvas.addEventListener("pointerup", () => {
+  if (knobDrag) { knobDrag = false; return; }
   if (drag === "item") { drag = ""; if (moved) dropDragged(); else { dragCD = null; dragObj = null; ghost.visible = false; } return; }
   if (!moved && !organizing) {
     if (focused) {
@@ -742,6 +763,7 @@ canvas.addEventListener("pointerup", () => {
 canvas.addEventListener("dblclick", () => { if (focused) { lidTarget = lidTarget > 0.5 ? 0 : 1; showInfo(focused.album); } });
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
+  if (tvMode && pickKnob()) { setVolume(audio.volume - Math.sign(e.deltaY) * 0.05); return; }
   if (focused || tvMode) return;
   const step = THREE.MathUtils.clamp(e.deltaY, -120, 120) * 0.0007;
   view.tdist = THREE.MathUtils.clamp(view.tdist * Math.exp(step), fitDist * 0.4, fitDist * 1.25);

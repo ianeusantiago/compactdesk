@@ -155,3 +155,6 @@ body.organizing [data-open="organize"] { background: var(--ink); color: var(--pa
 /* barra da TV */
 #tvbar { position: fixed; left: 50%; bottom: 46px; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; padding: 10px 14px; z-index: 6; animation: slide .3s; }
 #tvinfo { font: 500 12px var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); padding: 0 10px; max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+#tvbar .vol { display: flex; align-items: center; gap: 6px; font: 600 11px var(--cond); letter-spacing: .16em; padding: 0 6px; }
+#tvbar .vol input { width: 90px; }
