@@ -567,7 +567,13 @@ function pick(): CD | null {
   return hit ? world.cds.find((c) => { let o: THREE.Object3D | null = hit.object; while (o) { if (o === c.root) return true; o = o.parent; } return false; }) ?? null : null;
 }
 let savedDist = 0;
+// zoom no CD em foco (roda do mouse): aproxima até 4× na direção do mouse
+let fz = 1, fzT = 1;
+const fpan = new THREE.Vector2(), fpanT = new THREE.Vector2();
+function resetFocusZoom() { fzT = 1; fpanT.set(0, 0); }
+
 function grab(cd: CD) {
+  resetFocusZoom(); fz = 1; fpan.set(0, 0);
   focused = cd; spin = { x: 0, y: 0 }; lidTarget = 0;
   // garante espaço na frente da estante para o CD (com zoom muito perto ele ia parar atrás dela)
   savedDist = view.tdist;
@@ -575,6 +581,8 @@ function grab(cd: CD) {
   showInfo(cd.album);
 }
 function release() {
+  resetFocusZoom();
+  if (sharp) { sharp = false; resize(); }
   if (focused && savedDist) view.tdist = savedDist;
   focused = null;
   lidTarget = 0;
@@ -824,7 +832,19 @@ canvas.addEventListener("dblclick", () => {
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
   if (tvMode && pickKnob()) { setVolume(audio.volume - Math.sign(e.deltaY) * 0.05); return; }
-  if (focused || tvMode) return;
+  if (focused) {
+    const before = fzT;
+    fzT = THREE.MathUtils.clamp(fzT * Math.exp(-THREE.MathUtils.clamp(e.deltaY, -120, 120) * 0.0016), 1, 4);
+    if (fzT <= 1.001) { fpanT.set(0, 0); return; }
+    // aproxima em direção ao ponto sob o mouse (move o CD no sentido oposto)
+    const dist = FOCUS_DIST / before;
+    const halfH = dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const k = 1 - before / fzT;
+    fpanT.x -= mouse.x * halfH * camera.aspect * k;
+    fpanT.y -= mouse.y * halfH * k;
+    return;
+  }
+  if (tvMode) return;
   const step = THREE.MathUtils.clamp(e.deltaY, -120, 120) * 0.0007;
   const before = view.tdist;
   view.tdist = THREE.MathUtils.clamp(view.tdist * Math.exp(step), MIN_DIST, fitDist * 1.25);
@@ -850,9 +870,11 @@ addEventListener("keydown", (e) => {
 });
 
 // ---------- Loop ----------
+let sharp = false;
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
-  const w = Math.max(1, Math.floor(innerWidth / settings.pixel)), h = Math.max(1, Math.floor(innerHeight / settings.pixel));
+  const px = sharp ? 1 : settings.pixel;
+  const w = Math.max(1, Math.floor(innerWidth / px)), h = Math.max(1, Math.floor(innerHeight / px));
   lowRes.setSize(w, h);
   crt.uniforms.res.value.set(w, h);
   crt.uniforms.amt.value = settings.crt;
@@ -863,7 +885,7 @@ addEventListener("resize", () => { resize(); });
 
 const clock = new THREE.Clock();
 const v3 = new THREE.Vector3(), q = new THREE.Quaternion(), eul = new THREE.Euler();
-const fwd = new THREE.Vector3(), right = new THREE.Vector3();
+const fwd = new THREE.Vector3(), right = new THREE.Vector3(), v3b = new THREE.Vector3();
 
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
@@ -903,8 +925,14 @@ renderer.setAnimationLoop(() => {
     // centro da área livre (à esquerda do painel de faixas), na distância de foco
     const panelPx = info.hidden ? 0 : info.offsetWidth + 28;
     const ndcX = (innerWidth - panelPx) / innerWidth - 1;
-    const halfW = FOCUS_DIST * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
-    v3.copy(camera.position).addScaledVector(fwd, FOCUS_DIST).addScaledVector(right, ndcX * halfW + lidOpen * 0.3);
+    fz += (fzT - fz) * ease(9);
+    fpan.lerp(fpanT, ease(9));
+    const dist = FOCUS_DIST / fz;
+    const halfW = dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
+    const upv = v3b.crossVectors(right, fwd).normalize();
+    v3.copy(camera.position).addScaledVector(fwd, dist)
+      .addScaledVector(right, ndcX * halfW + (lidOpen * 0.3) / fz + fpan.x)
+      .addScaledVector(upv, fpan.y);
     focused.root.position.lerp(v3, ease(6));
     if (drag !== "spin") spin.y += dt * 0.2 * (1 - lidTarget);
     eul.set(spin.x, spin.y + Math.sin(t) * 0.04, 0);
@@ -912,6 +940,8 @@ renderer.setAnimationLoop(() => {
     focused.root.scale.lerp(v3.setScalar(1), ease(6));
     lidOpen += (lidTarget - lidOpen) * ease(5);
     focused.lid.rotation.y = -lidOpen * 1.95;
+    const wantSharp = fzT > 1.25;
+    if (wantSharp !== sharp) { sharp = wantSharp; resize(); }
     focused.disc.rotation.z -= dt * 0.6 * lidOpen; // o disco gira devagar quando aberto
   }
 
