@@ -58,11 +58,14 @@ export type Settings = {
   scene: string; finish: string; customColor: string; slots: number; rows: number;
   pixel: number; crt: number; display: "capa" | "lombada"; token: string;
   owned: string[]; placed: string[];
-  decorPos: Record<string, [number, number, number]>; // posição escolhida no modo Organizar
+  decorPos: Record<string, [number, number, number]>; // (antigo) posição absoluta
+  /** posição relativa: s = lado da estante (-1 esq, 1 dir, 0 em frente/em cima), dx/dy/dz a partir da lateral, do chão e da parede */
+  decorRel: Record<string, { s: number; dx: number; dy: number; dz: number }>;
+  wall: string; sideWall: string; floor: string; // catálogo: "auto" = do cenário, sideWall "same" = igual ao fundo
 };
 const DEFAULTS: Settings = {
   scene: "estudio", finish: "carvalho", customColor: "", slots: 6, rows: 3,
-  pixel: 2, crt: 0.35, display: "lombada", token: "", owned: [], placed: [], decorPos: {},
+  pixel: 2, crt: 0.35, display: "lombada", token: "", owned: [], placed: [], decorPos: {}, decorRel: {}, wall: "auto", sideWall: "same", floor: "auto",
 };
 export function loadSettings(): Settings {
   try {

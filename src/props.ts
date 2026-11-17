@@ -1,10 +1,10 @@
-﻿import * as THREE from "three";
+import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { Album } from "./data";
 import { grainTex, pixTex, woodTex } from "./retro";
 
 const std = (color: string, rough = 0.7, extra: THREE.MeshStandardMaterialParameters = {}) =>
-  new THREE.MeshStandardMaterial({ color, roughness: rough, map: grainTex(), ...extra }); // granulado retrÃ´ em tudo
+  new THREE.MeshStandardMaterial({ color, roughness: rough, map: grainTex(), ...extra }); // granulado retrô em tudo
 const rbox = (w: number, h: number, d: number, r: number, mat: THREE.Material) => {
   const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, r), mat);
   m.castShadow = m.receiveShadow = true;
@@ -59,7 +59,7 @@ export function buildFrames(albums: Album[]): THREE.Group {
 }
 
 // =====================================================================
-// DecoraÃ§Ãµes (modelos refeitos)
+// Decorações (modelos refeitos)
 // =====================================================================
 function leafGeometry(len: number, wid: number) {
   const s = new THREE.Shape();
@@ -67,7 +67,7 @@ function leafGeometry(len: number, wid: number) {
   s.bezierCurveTo(wid, len * 0.25, wid * 0.8, len * 0.75, 0, len);
   s.bezierCurveTo(-wid * 0.8, len * 0.75, -wid, len * 0.25, 0, 0);
   const geo = new THREE.ShapeGeometry(s, 8);
-  // curva a folha para trÃ¡s
+  // curva a folha para trás
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i), x = pos.getX(i);
@@ -144,7 +144,9 @@ export const DECOR_BUILD: Record<string, () => THREE.Object3D> = {
       for (let i = 0; i < 4000; i++) { x.fillStyle = `rgba(80,50,30,${Math.random() * 0.06})`; x.fillRect(Math.random() * 256, Math.random() * 256, 1, 1); }
     }) }));
     m.rotation.x = -Math.PI / 2; m.receiveShadow = true;
-    return m;
+    m.position.y = 0.004; // um fio acima do chão, sem piscar
+    const g = new THREE.Group(); g.add(m);
+    return g;
   },
   caixa_som() {
     const g = new THREE.Group();

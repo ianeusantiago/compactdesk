@@ -158,3 +158,27 @@ body.organizing [data-open="organize"] { background: var(--ink); color: var(--pa
 
 #tvbar .vol { display: flex; align-items: center; gap: 6px; font: 600 11px var(--cond); letter-spacing: .16em; padding: 0 6px; }
 #tvbar .vol input { width: 90px; }
+
+/* ---------- catálogo da sala (amostras na frente da tela) ---------- */
+#drawer.catalog { top: auto; left: 22px; right: 22px; bottom: 46px; width: auto; height: min(330px, 46vh); padding: 18px 26px 18px 30px; display: flex; flex-direction: column; }
+#drawer.catalog::before { display: none; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 3px double var(--ink); padding: 0 40px 10px 0; margin-bottom: 14px; }
+.tabs button { border: 0; padding: 6px 12px; }
+.tabs button.on { background: var(--ink); color: var(--paper); }
+.catbody { flex: 1; overflow: auto; }
+.samples { display: flex; gap: 14px; flex-wrap: wrap; align-content: flex-start; }
+.sample { display: flex; flex-direction: column; align-items: center; gap: 6px; border: 0; padding: 0; width: 96px; text-transform: none; letter-spacing: 0; }
+.sample:hover { background: transparent; color: var(--ink); }
+.sample .chip { width: 96px; height: 96px; image-rendering: pixelated; background-repeat: repeat; box-shadow: 0 8px 16px -10px rgba(0,0,0,.55), inset 0 0 0 1px rgba(0,0,0,.08);
+  transition: transform .18s; position: relative; }
+.sample .chip::after { content: ""; position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; background: linear-gradient(135deg, transparent 50%, rgba(0,0,0,.15) 50%); } /* cantinho dobrado */
+.sample:hover .chip { transform: translateY(-3px) rotate(-1.5deg); }
+.sample.on .chip { outline: 2px solid var(--ink); outline-offset: 4px; }
+.sample .nm { font: 500 12px var(--cond); letter-spacing: .06em; text-align: center; line-height: 1.15; }
+.sample.on .nm { font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.chip.room { display: flex; flex-direction: column; }
+.chip.room i { flex: 1; background-size: 22px; image-rendering: pixelated; }
+.chip.room i + i { flex: .55; background-size: 34px; }
+.cols { display: flex; gap: 30px; flex-wrap: wrap; }
+.cols > .samples { flex: 1 1 380px; }
+.cols > .opts { flex: 1 1 240px; max-width: 340px; }

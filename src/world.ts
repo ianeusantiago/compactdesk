@@ -1,10 +1,11 @@
-﻿import * as THREE from "three";
+import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { buildCase, W, H, D } from "./case";
 import { FINISHES, SCENES, type Album, type Settings } from "./data";
 import { DECOR_BUILD, buildFrames } from "./props";
 import { buildTV, type TV } from "./tv";
-import { floorTex, grainTex, retroMat, wallTex, woodTex } from "./retro";
+import { grainTex, retroMat, woodTex } from "./retro";
+import { FLOORS, WALLS } from "./catalog";
 
 const tiled = (t: THREE.Texture, x: number, y: number) => { const c = t.clone(); c.repeat.set(x, y); c.needsUpdate = true; return c; };
 
@@ -12,11 +13,15 @@ export type CD = {
   album: Album; root: THREE.Group; lid: THREE.Group; disc: THREE.Object3D;
   home: THREE.Vector3; baseRot: THREE.Euler; hover: number; phase: number;
 };
-/** Objeto que dÃ¡ para arrastar no modo Organizar: no chÃ£o, na parede ou em cima da estante. */
+/** Objeto que dá para arrastar no modo Organizar: no chão, na parede ou em cima da estante. */
+export type Rel = { s: number; dx: number; dy: number; dz: number };
+/** altura fixa do chão da sala */
+const FLOOR_Y = -1.6;
 export type Placeable = { id: string; obj: THREE.Object3D; kind: "floor" | "wall" | "top" };
 export type World = {
   group: THREE.Group; cds: CD[]; placeables: Placeable[];
   width: number; height: number; floorY: number; wallZ: number; topY: number; roomHalf: number; shelfBox: THREE.Box3;
+  centerY: number; toRel: (p: Placeable) => Rel;
   slotCount: number; slotHome: (slot: number) => { home: THREE.Vector3; rot: THREE.Euler };
   slotAt: (p: THREE.Vector3) => number; hidden: number; tick: (t: number) => void; tv: TV;
 };
@@ -49,12 +54,12 @@ export function buildWorld(s: Settings, albums: Album[]): World {
   const scene = SCENES[s.scene] ?? SCENES.estudio;
   const finish = FINISHES[s.finish] ?? FINISHES.carvalho;
   const woodColor = s.customColor || finish.color;
-  // madeira pixelada (acabamentos lisos usam sÃ³ o granulado)
+  // madeira pixelada (acabamentos lisos usam só o granulado)
   const grained = finish.grain && !s.customColor;
   const wood = new THREE.MeshStandardMaterial({ map: grained ? tiled(woodTex(woodColor), 2, 1) : grainTex("plastic"), color: grained ? "#ffffff" : woodColor, roughness: 0.62 });
   const woodEdge = new THREE.MeshStandardMaterial({ map: grained ? woodTex(woodColor) : grainTex("plastic"), color: grained ? "#d6d1cb" : new THREE.Color(woodColor).multiplyScalar(0.82), roughness: 0.6 });
 
-  // ---------- Estante (painÃ©is com cantos arredondados) ----------
+  // ---------- Estante (painéis com cantos arredondados) ----------
   const spine = s.display === "lombada";
   const T = 0.045, depth = spine ? W + 0.1 : 0.5;
   const cellW = W + 0.12, rowH = H + 0.2;
@@ -62,9 +67,11 @@ export function buildWorld(s: Settings, albums: Album[]): World {
   const height = s.rows * rowH + T * (s.rows + 1);
   const width = innerW + T * 2;
   const plinth = 0.07;
-  const floorY = -height / 2 - plinth;
+  // o chão é fixo; a estante nasce nele e cresce para cima
+  const floorY = FLOOR_Y;
+  const cy = floorY + plinth + height / 2; // centro da estante
   const wallZ = -depth / 2 - 0.012;
-  const topY = height / 2;
+  const topY = cy + height / 2;
 
   const shelf = new THREE.Group();
   const panel = (w: number, h: number, d: number, x: number, y: number, z: number, mat: THREE.Material = wood) => {
@@ -75,24 +82,33 @@ export function buildWorld(s: Settings, albums: Album[]): World {
   panel(T, height, depth, -width / 2 + T / 2, 0, 0);
   panel(T, height, depth, width / 2 - T / 2, 0, 0);
   for (let r = 0; r <= s.rows; r++) panel(innerW + 0.002, T, depth - 0.004, 0, -height / 2 + T / 2 + r * (rowH + T), 0.002);
-  panel(width, T * 0.7, 0.015, 0, topY - T * 0.35, depth / 2 + 0.006, woodEdge); // fio frontal no topo
+  panel(width, T * 0.7, 0.015, 0, height / 2 - T * 0.35, depth / 2 + 0.006, woodEdge); // fio frontal no topo
   panel(width - 0.06, plinth, depth - 0.06, 0, -height / 2 - plinth / 2, -0.02, woodEdge); // base
+  shelf.position.y = cy;
   group.add(shelf);
 
-  // ---------- Sala ----------
-  const wall = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), new THREE.MeshStandardMaterial({ map: tiled(wallTex(scene.wall, scene.dark), 120, 60), roughness: 0.95 }));
+  // ---------- Sala (acabamentos do catálogo) ----------
+  const wallMap = (id: string, w: number, h: number) => {
+    const sw = WALLS[id] ?? WALLS.auto;
+    return tiled(sw.tex(scene.wall, scene.dark), w / sw.tile, h / sw.tile);
+  };
+  const floorMap = (w: number, h: number) => {
+    const sw = FLOORS[s.floor] ?? FLOORS.auto;
+    return tiled(sw.tex(scene.floor, scene.dark), w / sw.tile, h / sw.tile);
+  };
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), new THREE.MeshStandardMaterial({ map: wallMap(s.wall, 60, 30), roughness: 0.95 }));
   wall.position.set(0, floorY + 15, wallZ);
   wall.receiveShadow = true;
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), new THREE.MeshStandardMaterial({ map: tiled(floorTex(scene.floor, scene.dark), 40, 20), roughness: 0.8 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), new THREE.MeshStandardMaterial({ map: floorMap(60, 30), roughness: 0.8 }));
   floor.rotation.x = -Math.PI / 2; floor.position.set(0, floorY, wallZ + 15);
   floor.receiveShadow = true;
   const skirting = new THREE.Mesh(new THREE.BoxGeometry(60, 0.09, 0.02), retroMat(new THREE.Color(scene.wall).multiplyScalar(0.88).getStyle(), 0.6));
   skirting.position.set(0, floorY + 0.045, wallZ + 0.01); skirting.receiveShadow = true;
   group.add(wall, floor, skirting);
   // paredes laterais: fecham o quarto
-  const roomHalf = width / 2 + 6.5; // longe o bastante para nÃ£o aparecer no enquadramento normal
+  const roomHalf = width / 2 + 6.5; // longe o bastante para não aparecer no enquadramento normal
   for (const side of [-1, 1]) {
-    const w = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshStandardMaterial({ map: tiled(wallTex(scene.wall, scene.dark), 60, 60), color: "#f2f2f2", roughness: 0.95 }));
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshStandardMaterial({ map: wallMap(s.sideWall === "same" ? s.wall : s.sideWall, 30, 30), color: "#f2f2f2", roughness: 0.95 }));
     w.rotation.y = -side * Math.PI / 2;
     w.position.set(side * roomHalf, floorY + 15, wallZ + 15);
     w.receiveShadow = true;
@@ -100,15 +116,15 @@ export function buildWorld(s: Settings, albums: Album[]): World {
     sk.position.set(side * (roomHalf - 0.01), floorY + 0.045, wallZ + 15);
     group.add(w, sk);
   }
-  // Ã¡rea ocupada pela estante (para os mÃ³veis nÃ£o atravessarem)
+  // área ocupada pela estante (para os móveis não atravessarem)
   const shelfBox = new THREE.Box3(new THREE.Vector3(-width / 2, floorY, wallZ), new THREE.Vector3(width / 2, topY + 0.02, wallZ + depth + 0.03));
 
-  // ---------- PosiÃ§Ãµes dos CDs (com buracos, para separar por gÃªnero) ----------
+  // ---------- Posições dos CDs (com buracos, para separar por gênero) ----------
   const perRow = spine ? Math.floor((innerW - 0.06) / (D + 0.012)) : s.slots;
   const slotCount = perRow * s.rows;
   const pitch = spine ? D + 0.012 : cellW;
   const x0 = spine ? -innerW / 2 + 0.04 : -innerW / 2;
-  const plankTop = (r: number) => height / 2 - T - r * (rowH + T) - rowH;
+  const plankTop = (r: number) => cy + height / 2 - T - r * (rowH + T) - rowH;
   const slotHome = (slot: number) => {
     const r = Math.floor(slot / perRow), k = slot % perRow;
     const home = spine
@@ -118,12 +134,12 @@ export function buildWorld(s: Settings, albums: Album[]): World {
     return { home, rot };
   };
   const slotAt = (p: THREE.Vector3) => {
-    const r = THREE.MathUtils.clamp(Math.floor((height / 2 - T - p.y) / (rowH + T)), 0, s.rows - 1);
+    const r = THREE.MathUtils.clamp(Math.floor((topY - T - p.y) / (rowH + T)), 0, s.rows - 1);
     const k = THREE.MathUtils.clamp(Math.floor((p.x - x0) / pitch), 0, perRow - 1);
     return r * perRow + k;
   };
 
-  // quem jÃ¡ tem lugar fica; os outros ocupam o primeiro espaÃ§o livre
+  // quem já tem lugar fica; os outros ocupam o primeiro espaço livre
   const used = new Set<number>();
   for (const a of albums) {
     if (a.slot != null && a.slot < slotCount && !used.has(a.slot)) used.add(a.slot);
@@ -149,10 +165,33 @@ export function buildWorld(s: Settings, albums: Album[]): World {
     cds.push({ album, root, lid, disc, home, baseRot: rot, hover: 0, phase: Math.random() * 6 });
   }
 
-  // ---------- TV, quadrinhos e decoraÃ§Ãµes ----------
+  // ---------- TV, quadrinhos e decorações ----------
   const placeables: Placeable[] = [];
+  const half = width / 2;
+  // relativo → absoluto: fora da estante, preso à lateral mais próxima; em frente/em cima, proporcional à largura
+  const toAbs = (kind: Placeable["kind"], r: Rel): [number, number, number] => {
+    const x = r.s === 0 ? r.dx * half : r.s * half + r.dx;
+    const y = kind === "top" ? topY : kind === "floor" ? floorY : floorY + r.dy; // chão: sempre no chão
+    return [x, y, wallZ + r.dz];
+  };
+  const toRel = (p: Placeable): Rel => {
+    const { x, y, z } = p.obj.position;
+    const inside = p.kind === "top" || Math.abs(x) < half;
+    const sd = inside ? 0 : Math.sign(x);
+    return { s: sd, dx: inside ? x / half : x - sd * half, dy: y - floorY, dz: z - wallZ };
+  };
+  // posições antigas (absolutas, com o chão no meio da estante) viram relativas
+  const oldFloor = -height / 2 - plinth;
+  const legacy = (id: string): Rel | null => {
+    const a = s.decorPos[id];
+    if (!a) return null;
+    const inside = Math.abs(a[0]) < half;
+    const sd = inside ? 0 : Math.sign(a[0]);
+    return { s: sd, dx: inside ? a[0] / half : a[0] - sd * half, dy: a[1] - oldFloor, dz: a[2] - wallZ };
+  };
   const place = (id: string, obj: THREE.Object3D, kind: Placeable["kind"], def: [number, number, number]) => {
-    obj.position.set(...(s.decorPos[id] ?? def));
+    const rel = s.decorRel[id] ?? legacy(id);
+    obj.position.set(...(rel ? toAbs(kind, rel) : def));
     obj.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
     group.add(obj);
     placeables.push({ id, obj, kind });
@@ -163,14 +202,6 @@ export function buildWorld(s: Settings, albums: Album[]): World {
   const tv = buildTV(albums);
   tv.obj.scale.setScalar(TV_SCALE);
   place("tv", tv.obj, "floor", [-width / 2 - 1.55, floorY, wallZ + 0.36 * TV_SCALE]);
-  // posiÃ§Ãµes salvas com a TV pequena: afasta da estante e da parede se ela passou a encostar
-  const tvBox = new THREE.Box3();
-  for (let i = 0; i < 60; i++) {
-    tvBox.setFromObject(tv.obj);
-    if (tvBox.min.z < wallZ) { tv.obj.position.z += wallZ - tvBox.min.z + 0.01; continue; }
-    if (!tvBox.intersectsBox(shelfBox)) break;
-    tv.obj.position.x += tv.obj.position.x < 0 ? -0.05 : 0.05;
-  }
 
   // ---------- Tomada na parede (padrão brasileiro, 3 pinos) + cabo da TV ----------
   const outlet = new THREE.Group();
@@ -222,7 +253,6 @@ export function buildWorld(s: Settings, albums: Album[]): World {
     cable.castShadow = true;
     group.add(cable);
   };
-  updateCable();
   place("quadrinhos", buildFrames(albums), "wall", [width / 2 + 0.95, topY - 0.25, wallZ + 0.02]);
 
   const defaults: Record<string, [Placeable["kind"], [number, number, number]]> = {
@@ -239,9 +269,23 @@ export function buildWorld(s: Settings, albums: Album[]): World {
     const make = DECOR_BUILD[id], d = defaults[id];
     if (make && d) place(id, make(), d[0], d[1]);
   }
+  const pb = new THREE.Box3();
+  for (const p of placeables) {
+    if (p.kind === "top" || p.id === "tapete") continue;
+    for (let i = 0; i < 120; i++) {
+      pb.setFromObject(p.obj);
+      if (p.kind === "floor" && pb.min.z < wallZ) { p.obj.position.z += wallZ - pb.min.z + 0.01; continue; }
+      if (!pb.intersectsBox(shelfBox)) break;
+      p.obj.position.x += p.obj.position.x < 0 ? -0.05 : 0.05;
+    }
+  }
+  // a tomada fica atrás da TV já na posição final
+  outletPos.x = tv.obj.position.x + 0.35;
+  outlet.position.copy(outletPos);
+  updateCable();
 
   return {
-    group, cds, placeables, width, height, floorY, wallZ, topY, roomHalf, shelfBox,
+    group, cds, placeables, width, height, floorY, wallZ, topY, roomHalf, shelfBox, centerY: cy, toRel,
     slotCount, slotHome, slotAt, hidden, tick: (t: number) => { updateCable(); tv.tick(t); }, tv,
   };
 }

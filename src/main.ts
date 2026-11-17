@@ -10,6 +10,8 @@ import {
   type Album, type Role, type Settings,
 } from "./data";
 import { buildCase } from "./case";
+import { FLOORS, WALLS, swatchURL } from "./catalog";
+import { grainTex, woodTex } from "./retro";
 import { buildWorld, type CD, type Placeable, type World } from "./world";
 import { D, H, W } from "./case";
 
@@ -79,13 +81,13 @@ function frameShelf() {
   const tan = Math.tan(THREE.MathUtils.degToRad(18));
   fitDist = Math.max((world.height + 0.8) / (2 * tan), (world.width + 7) / (2 * tan * camera.aspect));
   view.tdist = fitDist;
-  view.tx = 0; view.ty = 0;
+  view.tx = 0; view.ty = world.centerY;
 }
 /** Não deixa a vista fugir da estante. */
 function clampView() {
   if (!world) return;
   view.tx = THREE.MathUtils.clamp(view.tx, -world.width / 2 - 3, world.width / 2 + 3);
-  view.ty = THREE.MathUtils.clamp(view.ty, -world.height / 2, world.height / 2);
+  view.ty = THREE.MathUtils.clamp(view.ty, world.floorY + 0.3, world.topY + 0.6);
 }
 
 // ---------- Mundo ----------
@@ -156,41 +158,80 @@ function openDrawer(mode: "custom" | "shop") {
   closeInfo();
   drawerMode = mode;
   drawer.hidden = false;
+  drawer.classList.toggle("catalog", mode === "custom");
   mode === "custom" ? renderCustom() : renderShop();
 }
 function closeDrawer() { drawerMode = ""; drawer.hidden = true; }
 
+type CatTab = "cenario" | "fundo" | "laterais" | "chao" | "estante" | "ajustes";
+let catTab: CatTab = "cenario";
+const TABS: [CatTab, string][] = [["cenario", "Cenário"], ["fundo", "Parede do fundo"], ["laterais", "Paredes laterais"], ["chao", "Chão"], ["estante", "Estante"], ["ajustes", "Ajustes"]];
+
+/** Amostra quadrada (como as de loja de papel de parede): a textura repetida, com o nome embaixo. */
+function tile(attr: string, url: string, name: string, on: boolean, size = 26) {
+  return `<button class="sample ${on ? "on" : ""}" ${attr}>
+    <span class="chip" style="background-image:url(${url});background-size:${size}px"></span>
+    <span class="nm">${esc(name)}</span></button>`;
+}
+function sceneTile(k: string, on: boolean) {
+  const sc = SCENES[k];
+  const w = swatchURL(WALLS.auto.tex(sc.wall, sc.dark)), f = swatchURL(FLOORS.auto.tex(sc.floor, sc.dark));
+  return `<button class="sample ${on ? "on" : ""}" data-scene="${k}">
+    <span class="chip room"><i style="background-image:url(${w})"></i><i style="background-image:url(${f})"></i></span>
+    <span class="nm">${esc(sc.name)}</span></button>`;
+}
+
 function renderCustom() {
   const s = settings;
+  const sc = SCENES[s.scene] ?? SCENES.estudio;
+  let body = "";
+  if (catTab === "cenario") {
+    body = `<p class="note">O cenário define a luz e o clima. Ele volta a parede e o chão para o padrão dele.</p>
+      <div class="samples">${Object.keys(SCENES).map((k) => sceneTile(k, s.scene === k)).join("")}</div>`;
+  } else if (catTab === "fundo" || catTab === "laterais") {
+    const key = catTab === "fundo" ? "wall" : "sideWall";
+    const cur = s[key];
+    const same = catTab === "laterais" ? tile(`data-wall="same" data-key="sideWall"`, swatchURL((WALLS[s.wall] ?? WALLS.auto).tex(sc.wall, sc.dark)), "Igual ao fundo", cur === "same") : "";
+    body = `<div class="samples">${same}${Object.entries(WALLS).map(([id, w]) =>
+      tile(`data-wall="${id}" data-key="${key}"`, swatchURL(w.tex(sc.wall, sc.dark)), w.name, cur === id)).join("")}</div>`;
+  } else if (catTab === "chao") {
+    body = `<div class="samples">${Object.entries(FLOORS).map(([id, f]) =>
+      tile(`data-floor="${id}"`, swatchURL(f.tex(sc.floor, sc.dark)), f.name, s.floor === id, 40)).join("")}</div>`;
+  } else if (catTab === "estante") {
+    body = `<div class="cols">
+      <div class="samples">${Object.entries(FINISHES).map(([k, v]) =>
+        tile(`data-finish="${k}"`, v.grain ? swatchURL(woodTex(v.color)) : swatchURL(grainTex("plastic")), v.name, !s.customColor && s.finish === k, 40)
+          .replace('class="chip"', `class="chip" data-tint="${v.grain ? "" : v.color}"`)).join("")}</div>
+      <div class="opts">
+        <label class="field">Cor personalizada</label>
+        <div class="row"><input type="color" id="cc" value="${s.customColor || FINISHES[s.finish]?.color || "#d8b88c"}">
+          <button data-clearcolor ${s.customColor ? "" : "disabled"}>Usar madeira</button></div>
+        <label class="field">Largura <span>${s.slots}</span></label>
+        <input type="range" min="3" max="10" value="${s.slots}" data-num="slots">
+        <label class="field">Prateleiras <span>${s.rows}</span></label>
+        <input type="range" min="1" max="5" value="${s.rows}" data-num="rows">
+        <label class="field">Mostrar os CDs</label>
+        <div class="seg"><button class="${s.display === "capa" ? "on" : ""}" data-display="capa">De frente</button>
+          <button class="${s.display === "lombada" ? "on" : ""}" data-display="lombada">Lombada</button></div>
+      </div></div>`;
+  } else {
+    body = `<div class="cols"><div class="opts">
+        <label class="field">Pixelado <span>${s.pixel}×</span></label>
+        <input type="range" min="1" max="5" value="${s.pixel}" data-num="pixel" data-norebuild>
+        <label class="field">Filtro de TV <span>${Math.round(s.crt * 100)}%</span></label>
+        <input type="range" min="0" max="100" value="${Math.round(s.crt * 100)}" data-crt>
+      </div><div class="opts">
+        <label class="field">Token do Discogs</label>
+        <input type="password" id="token" value="${esc(s.token)}" placeholder="cole aqui seu token">
+        <p class="note">Gere de graça em Discogs → Settings → Developers. Fica salvo só neste computador. <a href="#" data-dev>Abrir página</a></p>
+      </div></div>`;
+  }
   drawer.innerHTML = `
     <button class="close" data-x>✕</button>
-    <h2>Sala</h2>
-    <h3>Cenário</h3>
-    <div class="grid">${Object.entries(SCENES).map(([k, v]) =>
-      `<button class="swatch ${s.scene === k ? "on" : ""}" data-scene="${k}"><i style="background:${v.wall};box-shadow:inset 0 -6px ${v.floor}"></i>${v.name}</button>`).join("")}</div>
-    <h3>Prateleira</h3>
-    <div class="grid">${Object.entries(FINISHES).map(([k, v]) =>
-      `<button class="swatch ${!s.customColor && s.finish === k ? "on" : ""}" data-finish="${k}"><i style="background:${v.color}"></i>${v.name}</button>`).join("")}</div>
-    <label class="field">Cor personalizada</label>
-    <div class="row"><input type="color" id="cc" value="${s.customColor || FINISHES[s.finish]?.color || "#d8b88c"}" style="height:38px;padding:3px">
-      <button data-clearcolor ${s.customColor ? "" : "disabled"}>Usar madeira</button></div>
-    <label class="field">Largura <span>${s.slots}</span></label>
-    <input type="range" min="3" max="10" value="${s.slots}" data-num="slots">
-    <label class="field">Prateleiras <span>${s.rows}</span></label>
-    <input type="range" min="1" max="5" value="${s.rows}" data-num="rows">
-    <label class="field">Mostrar os CDs</label>
-    <div class="seg"><button class="${s.display === "capa" ? "on" : ""}" data-display="capa">De frente</button>
-      <button class="${s.display === "lombada" ? "on" : ""}" data-display="lombada">Lombada</button></div>
-    <h3>Visual retrô</h3>
-    <label class="field">Pixelado <span>${s.pixel}×</span></label>
-    <input type="range" min="1" max="5" value="${s.pixel}" data-num="pixel" data-norebuild>
-    <label class="field">Filtro de TV <span>${Math.round(s.crt * 100)}%</span></label>
-    <input type="range" min="0" max="100" value="${Math.round(s.crt * 100)}" data-crt>
-    <h3>Discogs</h3>
-    <label class="field">Token pessoal</label>
-    <input type="password" id="token" value="${esc(s.token)}" placeholder="cole aqui seu token">
-    <p class="note">Gere de graça em Discogs → Settings → Developers → "Generate new token". Fica salvo só neste computador.
-      <a href="#" data-dev>Abrir página</a></p>`;
+    <div class="tabs">${TABS.map(([k, n]) => `<button class="${catTab === k ? "on" : ""}" data-tab="${k}">${n}</button>`).join("")}</div>
+    <div class="catbody">${body}</div>`;
+  // acabamentos lisos: pinta o quadradinho com a cor
+  drawer.querySelectorAll<HTMLElement>("[data-tint]").forEach((el) => { if (el.dataset.tint) el.style.backgroundColor = el.dataset.tint, el.style.backgroundBlendMode = "multiply"; });
 }
 
 function renderShop() {
@@ -215,7 +256,10 @@ drawer.addEventListener("click", (e) => {
   const d = b.dataset;
   if (d.x !== undefined) return closeDrawer();
   if (d.dev !== undefined) { e.preventDefault(); openUrl("https://www.discogs.com/settings/developers"); return; }
-  if (d.scene) setSetting("scene", d.scene);
+  if (d.tab) catTab = d.tab as CatTab;
+  if (d.scene) { Object.assign(settings, { wall: "auto", sideWall: "same", floor: "auto" }); setSetting("scene", d.scene); }
+  if (d.wall) setSetting(d.key as "wall" | "sideWall", d.wall);
+  if (d.floor) setSetting("floor", d.floor);
   if (d.finish) { settings.customColor = ""; setSetting("finish", d.finish); }
   if (d.clearcolor !== undefined) setSetting("customColor", "");
   if (d.display) setSetting("display", d.display as Settings["display"]);
@@ -630,8 +674,7 @@ async function dropDragged() {
     rebuild();
   }
   if (dragObj) {
-    const pos = dragObj.p.obj.position;
-    settings.decorPos[dragObj.p.id] = [pos.x, pos.y, pos.z];
+    settings.decorRel[dragObj.p.id] = world.toRel(dragObj.p);
     saveSettings(settings);
     dragObj = null;
   }
