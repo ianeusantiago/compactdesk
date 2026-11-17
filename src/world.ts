@@ -8,6 +8,16 @@ import { grainTex, retroMat, woodTex } from "./retro";
 import { FLOORS, WALLS } from "./catalog";
 
 const tiled = (t: THREE.Texture, x: number, y: number) => { const c = t.clone(); c.repeat.set(x, y); c.needsUpdate = true; return c; };
+/** Superfície da sala com a mesma cor da amostra do catálogo: parte vem da própria textura (emissiva),
+ *  parte da luz — assim continua recebendo as sombras dos móveis sem escurecer. Longe/de lado, suaviza para não "tremer". */
+const roomMat = (map: THREE.Texture, rough: number) => {
+  map.minFilter = THREE.LinearMipmapLinearFilter; map.magFilter = THREE.LinearFilter; map.anisotropy = 8;
+  return new THREE.MeshStandardMaterial({ map, color: "#8c8c8c", emissive: "#ffffff", emissiveMap: map, emissiveIntensity: 0.58, roughness: rough });
+};
+const flatMat = (map: THREE.Texture) => {
+  map.minFilter = THREE.LinearMipmapLinearFilter; map.magFilter = THREE.LinearFilter; map.anisotropy = 8;
+  return new THREE.MeshBasicMaterial({ map }); // paredes laterais: cor exata da amostra
+};
 
 export type CD = {
   album: Album; root: THREE.Group; lid: THREE.Group; disc: THREE.Object3D;
@@ -17,6 +27,8 @@ export type CD = {
 export type Rel = { s: number; dx: number; dy: number; dz: number };
 /** altura fixa do chão da sala */
 const FLOOR_Y = -1.6;
+/** escala das estampas na sala: ripas, tijolos e listras no tamanho real (igual à amostra) */
+const WALL_SCALE = 2, FLOOR_SCALE = 1.3;
 export type Placeable = { id: string; obj: THREE.Object3D; kind: "floor" | "wall" | "top" };
 export type World = {
   group: THREE.Group; cds: CD[]; placeables: Placeable[];
@@ -90,16 +102,16 @@ export function buildWorld(s: Settings, albums: Album[]): World {
   // ---------- Sala (acabamentos do catálogo) ----------
   const wallMap = (id: string, w: number, h: number) => {
     const sw = WALLS[id] ?? WALLS.auto;
-    return tiled(sw.tex(scene.wall, scene.dark), w / sw.tile, h / sw.tile);
+    return tiled(sw.tex(scene.wall, scene.dark), w / (sw.tile * WALL_SCALE), h / (sw.tile * WALL_SCALE));
   };
   const floorMap = (w: number, h: number) => {
     const sw = FLOORS[s.floor] ?? FLOORS.auto;
-    return tiled(sw.tex(scene.floor, scene.dark), w / sw.tile, h / sw.tile);
+    return tiled(sw.tex(scene.floor, scene.dark), w / (sw.tile * FLOOR_SCALE), h / (sw.tile * FLOOR_SCALE));
   };
-  const wall = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), new THREE.MeshStandardMaterial({ map: wallMap(s.wall, 60, 30), roughness: 0.95 }));
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), roomMat(wallMap(s.wall, 60, 30), 0.95));
   wall.position.set(0, floorY + 15, wallZ);
   wall.receiveShadow = true;
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), new THREE.MeshStandardMaterial({ map: floorMap(60, 30), roughness: 0.8 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 30), roomMat(floorMap(60, 30), 0.8));
   floor.rotation.x = -Math.PI / 2; floor.position.set(0, floorY, wallZ + 15);
   floor.receiveShadow = true;
   const skirting = new THREE.Mesh(new THREE.BoxGeometry(60, 0.09, 0.02), retroMat(new THREE.Color(scene.wall).multiplyScalar(0.88).getStyle(), 0.6));
@@ -108,7 +120,7 @@ export function buildWorld(s: Settings, albums: Album[]): World {
   // paredes laterais: fecham o quarto
   const roomHalf = width / 2 + 6.5; // longe o bastante para não aparecer no enquadramento normal
   for (const side of [-1, 1]) {
-    const w = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshStandardMaterial({ map: wallMap(s.sideWall === "same" ? s.wall : s.sideWall, 30, 30), color: "#f2f2f2", roughness: 0.95 }));
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), flatMat(wallMap(s.sideWall === "same" ? s.wall : s.sideWall, 30, 30)));
     w.rotation.y = -side * Math.PI / 2;
     w.position.set(side * roomHalf, floorY + 15, wallZ + 15);
     w.receiveShadow = true;
