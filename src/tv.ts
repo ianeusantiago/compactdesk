@@ -149,7 +149,16 @@ export function buildTV(albums: Album[]): TV {
   // ---------- programação ----------
   const covers = new Map<number, HTMLImageElement>();
   for (const a of real) if (a.urls?.front) { const im = new Image(); im.src = a.urls.front; covers.set(a.id, im); }
-  let ai = real.length ? Math.floor(Math.random() * real.length) : 0, ti = 0, start = performance.now() / 1000;
+  // cada vez que o app abre, começa num álbum aleatório (diferente do último, se houver mais de um)
+  let ai = 0, ti = 0, start = performance.now() / 1000;
+  if (real.length) {
+    let last = -1;
+    try { last = Number(sessionStorage.getItem("cd.tvAlbum") ?? localStorage.getItem("cd.tvLast") ?? -1); } catch { /* ok */ }
+    const saved = sessionStorage.getItem("cd.tvAlbum");
+    const pool = real.map((_, i) => i).filter((i) => real.length < 2 || real[i].id !== last || saved !== null);
+    ai = saved !== null ? Math.max(0, real.findIndex((a) => a.id === last)) : pool[Math.floor(Math.random() * pool.length)];
+    try { sessionStorage.setItem("cd.tvAlbum", String(real[ai].id)); localStorage.setItem("cd.tvLast", String(real[ai].id)); } catch { /* ok */ }
+  }
   let ext: External | null = null;
   let lastDraw = -1;
   let volume = 0.8, volShownAt = -10;
@@ -252,6 +261,7 @@ export function buildTV(albums: Album[]): TV {
     stepAlbum(dir) {
       if (!on) return;
       ai = (ai + dir + real.length) % real.length; ti = 0;
+      try { sessionStorage.setItem("cd.tvAlbum", String(real[ai].id)); } catch { /* ok */ }
       start = performance.now() / 1000;
     },
     knob,

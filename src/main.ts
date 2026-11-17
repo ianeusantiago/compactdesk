@@ -73,6 +73,7 @@ scene.add(hemi, key);
 const view = { x: 0, y: 0, dist: 7, tx: 0, ty: 0, tdist: 7 };
 const FOCUS_DIST = 2.5; // distância do CD em foco até a câmera
 let fitDist = 7;
+const MIN_DIST = 1.05; // perto o bastante para ler as lombadas
 function frameShelf() {
   if (!world) return;
   const tan = Math.tan(THREE.MathUtils.degToRad(18));
@@ -112,7 +113,13 @@ function rebuild(reframe = false) {
   key.intensity = 2.2 * sc.light;
   document.body.classList.toggle("dark-ui", sc.dark);
   document.documentElement.style.setProperty("--bg", sc.wall);
-  if (reframe) frameShelf(); else { const d = view.tdist; frameShelf(); view.tdist = THREE.MathUtils.clamp(d, fitDist * 0.4, fitDist * 1.25); }
+  if (reframe) frameShelf();
+  else { // mantém a câmera onde estava (só recalcula o limite de zoom)
+    const { tx, ty, tdist } = view;
+    frameShelf();
+    Object.assign(view, { tx, ty, tdist: THREE.MathUtils.clamp(tdist, MIN_DIST, fitDist * 1.25) });
+    clampView();
+  }
   updatePoints();
 }
 
@@ -664,7 +671,7 @@ function enterTV() {
   tvMode = true;
   tvSaved = { tx: view.tx, ty: view.ty, tdist: view.tdist };
   const p = world.tv.obj.localToWorld(world.tv.screenCenter.clone());
-  view.tx = p.x; view.ty = p.y + 0.02; view.tdist = p.z + 2.15;
+  view.tx = p.x; view.ty = p.y - 0.14; view.tdist = p.z + 2.15;
   tvbar.hidden = false;
   closeDrawer();
   setVolume(audio.volume);
@@ -760,13 +767,30 @@ canvas.addEventListener("pointerup", () => {
   }
   drag = "";
 });
-canvas.addEventListener("dblclick", () => { if (focused) { lidTarget = lidTarget > 0.5 ? 0 : 1; showInfo(focused.album); } });
+canvas.addEventListener("dblclick", () => {
+  // duplo clique na tela da TV: troca de álbum
+  if (!focused && !organizing && world?.tv.on) {
+    ray.setFromCamera(mouse, camera);
+    if (ray.intersectObject(world.tv.screen).length) {
+      world.tv.stepAlbum(1);
+      if (tvMode) playCurrent();
+      return;
+    }
+  } if (focused) { lidTarget = lidTarget > 0.5 ? 0 : 1; showInfo(focused.album); } });
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
   if (tvMode && pickKnob()) { setVolume(audio.volume - Math.sign(e.deltaY) * 0.05); return; }
   if (focused || tvMode) return;
   const step = THREE.MathUtils.clamp(e.deltaY, -120, 120) * 0.0007;
-  view.tdist = THREE.MathUtils.clamp(view.tdist * Math.exp(step), fitDist * 0.4, fitDist * 1.25);
+  const before = view.tdist;
+  view.tdist = THREE.MathUtils.clamp(view.tdist * Math.exp(step), MIN_DIST, fitDist * 1.25);
+  // ao aproximar, a vista vai suavemente na direção do mouse (para chegar perto das lombadas)
+  if (view.tdist < before) {
+    const half = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * view.dist;
+    const k = (before - view.tdist) / before;
+    view.tx += mouse.x * half * camera.aspect * k;
+    view.ty += mouse.y * half * k;
+  }
   clampView();
 }, { passive: false });
 addEventListener("keydown", (e) => {
